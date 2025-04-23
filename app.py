@@ -1,7 +1,13 @@
-import gradio as gr
+import os
 import json
 from openai import OpenAI
-from config import OPENAI_API_KEY
+import gradio as gr
+
+# Get API key from environment variables
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+if OPENAI_API_KEY is None:
+    raise ValueError("API Key not set in environment variables.")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
