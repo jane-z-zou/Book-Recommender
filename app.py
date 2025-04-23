@@ -1,7 +1,6 @@
 import os
-import json
-from openai import OpenAI
 import gradio as gr
+from openai import OpenAI
 
 # Get API key from environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -11,17 +10,22 @@ if OPENAI_API_KEY is None:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-def get_recommendations(book_json_text):
-    try:
-        book_list = json.loads(book_json_text)
-        if not isinstance(book_list, list):
-            return "Invalid format: Please provide a list of books in JSON."
-    except json.JSONDecodeError:
-        return "Invalid JSON. Please check your formatting."
-
+def get_recommendations(books_input):
+    # Split the input by line and format the books
+    books = books_input.splitlines()
+    
+    if not books:
+        return "Please enter at least one book."
+    
+    # Build the prompt by processing the books
     prompt = "I’ve read and deeply enjoyed the following books:\n\n"
-    for book in book_list:
-        prompt += f"- {book['title']} ({book['rating']} stars): {book['notes']}\n"
+    for book in books:
+        # Split the book into title and author
+        try:
+            title, author = book.split(" by ")
+            prompt += f"- {title} by {author}\n"
+        except ValueError:
+            return "Please enter books in the format 'Title by Author'. For example, 'Hamnet by Maggie O'Farrell'."
     
     prompt += (
         "\nBased on this list, please analyze the emotional, thematic, and stylistic threads "
@@ -33,6 +37,7 @@ def get_recommendations(book_json_text):
         "Prioritize introspective storytelling, beautiful prose, and emotional depth over genre similarity."
     )
 
+    # Get recommendations from OpenAI API
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -45,16 +50,20 @@ def get_recommendations(book_json_text):
     return response.choices[0].message.content
 
 with gr.Blocks(title="📚 Book Recommender AI") as demo:
-    gr.Markdown("# 📖 Personalized Book Recommender\nUpload or paste your favorite books to get deep, thoughtful recommendations.")
+    gr.Markdown("# 📖 Personalized Book Recommender\nEnter your favorite books to get deep, thoughtful recommendations.")
     
     with gr.Row():
-        input_json = gr.Textbox(label="📚 Paste Your Book List (in JSON)", lines=15, placeholder='[{"title": "Hamnet", "rating": 5, "notes": "emotional, poetic, historical"}]')
+        input_books = gr.Textbox(
+            label="📚 Paste Your Favorite Books (One per Line)",
+            lines=10, 
+            placeholder='Hamnet by Maggie O\'Farrell\nThe Midnight Library by Matt Haig'
+        )
     
     with gr.Row():
         recommend_btn = gr.Button("✨ Recommend Books")
     
     output = gr.Textbox(label="🔍 Recommendations", lines=20)
 
-    recommend_btn.click(fn=get_recommendations, inputs=input_json, outputs=output)
+    recommend_btn.click(fn=get_recommendations, inputs=input_books, outputs=output)
 
 demo.launch()
