@@ -1,69 +1,56 @@
 import os
+import requests
 import gradio as gr
-from openai import OpenAI
 
-# Get API key from environment variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# Get Hugging Face API key from environment variables
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+if HUGGINGFACE_API_KEY is None:
+    raise ValueError("Hugging Face API Key not set. Set it using 'export HUGGINGFACE_API_KEY=your_key_here'")
 
-if OPENAI_API_KEY is None:
-    raise ValueError("API Key not set in environment variables.")
+API_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
+HEADERS = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+def query_huggingface(prompt):
+    response = requests.post(
+        API_URL,
+        headers=HEADERS,
+        json={"inputs": prompt, "parameters": {"max_new_tokens": 1000}}  # Adjust if needed
+    )
+    if response.status_code != 200:
+        return f"❌ Error {response.status_code}: {response.text}"
+    return response.json()[0]["generated_text"]
 
 def get_recommendations(books_input):
-    # Split the input by line and format the books
-    books = books_input.splitlines()
-    
+    books = books_input.strip().splitlines()
     if not books:
-        return "Please enter at least one book."
-    
-    # Build the prompt by processing the books
+        return "⚠️ Please enter at least one book in the format: Title by Author"
+
     prompt = "I’ve read and deeply enjoyed the following books:\n\n"
     for book in books:
-        # Split the book into title and author
         try:
             title, author = book.split(" by ")
             prompt += f"- {title} by {author}\n"
         except ValueError:
-            return "Please enter books in the format 'Title by Author'. For example, 'Hamnet by Maggie O'Farrell'."
-    
+            return "⚠️ Format error. Please use 'Title by Author' on each line."
+
     prompt += (
-        "\nBased on this list, please analyze the emotional, thematic, and stylistic threads "
-        "that tie these books together. Then, recommend five other books I am likely to enjoy "
-        "on a similarly profound level. For each recommendation, include:\n"
-        "- A brief synopsis\n"
-        "- An explanation of why you believe it fits my taste\n"
-        "- Which of my previously read books it most closely resonates with and why\n"
-        "Prioritize introspective storytelling, beautiful prose, and emotional depth over genre similarity."
+        "\nBased on this list, recommend 5 books I’ll love 🧡. Keep responses SHORT (3-4 lines per book), include emojis 🎯📚✨, and skip long analysis.\n"
+        "For each book, give:\n"
+        "1. A quick blurb or vibe 🎭\n"
+        "2. Why it matches my taste 🧠\n"
+        "3. A similar book I’ve read 📖\n"
+        "Make it warm, fun, and human — like a friend texting recs 💬💡"
     )
 
-    # Get recommendations from OpenAI API
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a literary assistant who gives deeply personalized book recommendations."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.8
-    )
+    return query_huggingface(prompt)
 
-    return response.choices[0].message.content
+with gr.Blocks(title="📚 Book Recommender AI (Free Edition)") as demo:
+    gr.Markdown("## 📖 Personalized Book Recommender\nEnter a few of your favorite books to get cozy, emoji-filled suggestions 💬📚✨")
+    
+    input_box = gr.Textbox(lines=10, placeholder="e.g.\nHamnet by Maggie O'Farrell\nA Psalm for the Wild-Built by Becky Chambers", label="📚 Your Favorite Books")
+    output_box = gr.Textbox(lines=20, label="🔍 Recommendations")
+    generate_button = gr.Button("✨ Recommend Books")
 
-with gr.Blocks(title="📚 Book Recommender AI") as demo:
-    gr.Markdown("# 📖 Personalized Book Recommender\nEnter your favorite books to get deep, thoughtful recommendations.")
-    
-    with gr.Row():
-        input_books = gr.Textbox(
-            label="📚 Paste Your Favorite Books (One per Line)",
-            lines=10, 
-            placeholder='Hamnet by Maggie O\'Farrell\nThe Midnight Library by Matt Haig'
-        )
-    
-    with gr.Row():
-        recommend_btn = gr.Button("✨ Recommend Books")
-    
-    output = gr.Textbox(label="🔍 Recommendations", lines=20)
-
-    recommend_btn.click(fn=get_recommendations, inputs=input_books, outputs=output)
+    generate_button.click(get_recommendations, inputs=input_box, outputs=output_box)
 
 demo.launch()
